@@ -2,6 +2,9 @@ package bali
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -15,14 +18,31 @@ type Node[T any] struct {
 	Next     *Node[T]
 }
 
+func (n *Node[T]) GoString() string {
+	return fmt.Sprintf("{Value: %v, RecordID: %v}", n.Value, n.RecordID)
+}
+
 type IndexArray[T any] struct {
 	Head  *Node[T]
 	Count uint64
 	Mutex sync.RWMutex
 }
 
+func (ia *IndexArray[T]) GoString() string {
+	builder := strings.Builder{}
+	for head := ia.Head; head != nil; head = head.Next {
+		builder.WriteString(head.GoString())
+
+		if head.Next != nil {
+			builder.WriteString("->")
+		}
+	}
+
+	return builder.String()
+}
+
 type Index[T any] struct {
-	Array     []IndexArray[T]
+	Array     []*IndexArray[T]
 	Count     uint64
 	Threshold uint64
 	Mutex     sync.RWMutex
@@ -30,9 +50,29 @@ type Index[T any] struct {
 
 func NewIndex[T any](threshold uint64) *Index[T] {
 	return &Index[T]{
-		Array:     make([]IndexArray[T], 0),
+		Array:     make([]*IndexArray[T], 0),
 		Threshold: threshold,
 	}
+}
+
+type ErrEmptyIndex struct{}
+
+func (e *ErrEmptyIndex) Error() string {
+	return "index is empty"
+}
+
+func IsEmptyIndexErr(err error) bool {
+	return errors.Is(err, &ErrEmptyIndex{})
+}
+
+type ErrTooSmall struct{}
+
+func (e *ErrTooSmall) Error() string {
+	return "value is too small"
+}
+
+func IsTooSmallErr(err error) bool {
+	return errors.Is(err, &ErrTooSmall{})
 }
 
 type ErrNotFound struct{}
@@ -41,13 +81,17 @@ func (e *ErrNotFound) Error() string {
 	return "record not found"
 }
 
-func IsNotFoundError(err error) bool {
+func IsNotFoundErr(err error) bool {
 	return errors.Is(err, &ErrNotFound{})
 }
 
 func (idx *Index[T]) binarySearchArray(value Comparable[T]) (int, error) {
 	leftIndex := 0
 	rightIndex := len(idx.Array) - 1
+
+	if value.Compare(idx.Array[0].Head.Value) < 0 {
+		return -1, new(ErrTooSmall)
+	}
 
 	for leftIndex <= rightIndex {
 		midIndex := (leftIndex + rightIndex) / 2
@@ -58,7 +102,11 @@ func (idx *Index[T]) binarySearchArray(value Comparable[T]) (int, error) {
 		case 0:
 			return midIndex, nil
 		case 1:
-			if len(idx.Array)-1 == midIndex || (len(idx.Array)-1 > midIndex && value.Compare(idx.Array[midIndex+1].Head.Value) >= 0) {
+			if len(idx.Array)-1 == midIndex {
+				return midIndex, nil
+			}
+
+			if value.Compare(idx.Array[midIndex+1].Head.Value) <= 0 {
 				return midIndex, nil
 			}
 
@@ -76,6 +124,10 @@ func (idx *Index[T]) Search(value Comparable[T]) (uint64, error) {
 	leftIndex, err := idx.binarySearchArray(value)
 	if err != nil {
 		return 0, err
+	}
+
+	if leftIndex == -1 {
+		leftIndex = 0
 	}
 
 	idx.Array[leftIndex].Mutex.RLock()
@@ -102,20 +154,23 @@ func (idx *Index[T]) Insert(value Comparable[T], recordID uint64) error {
 	defer idx.Mutex.Unlock()
 
 	if len(idx.Array) == 0 {
-		idx.Array = make([]IndexArray[T], 1)
-		idx.Array[0].Head = &Node[T]{Value: value, RecordID: recordID}
-		idx.Array[0].Count = 1
+		idx.Array = make([]*IndexArray[T], 1)
+		idx.Array[0] = &IndexArray[T]{Head: &Node[T]{Value: value, RecordID: recordID}, Count: 1}
 		idx.Count = 1
 		return nil
 	}
 
 	leftIndex, _ := idx.binarySearchArray(value)
+	if leftIndex < 0 {
+		leftIndex = 0
+	}
 
 	idx.Array[leftIndex].Mutex.Lock()
 	defer idx.Array[leftIndex].Mutex.Unlock()
 
 	prev := (*Node[T])(nil)
 	head := idx.Array[leftIndex].Head
+loop:
 	for head != nil {
 		switch value.Compare(head.Value) {
 		case -1:
@@ -132,13 +187,13 @@ func (idx *Index[T]) Insert(value Comparable[T], recordID uint64) error {
 				idx.Array[leftIndex].Head = head
 			}
 
-			return nil
+			break loop
 		case 0:
 			if head.Next == nil {
 				head.Next = &Node[T]{Value: value, RecordID: recordID}
 				idx.Array[leftIndex].Count++
 				idx.Count++
-				return nil
+				break loop
 			}
 
 			if value.Compare(head.Next.Value) > 0 {
@@ -146,14 +201,22 @@ func (idx *Index[T]) Insert(value Comparable[T], recordID uint64) error {
 				idx.Array[leftIndex].Count++
 				idx.Count++
 				head.Next = newNode
-				return nil
+				break loop
 			}
 		case 1:
 			if head.Next == nil {
 				head.Next = &Node[T]{Value: value, RecordID: recordID}
 				idx.Array[leftIndex].Count++
 				idx.Count++
-				return nil
+				break loop
+			}
+
+			if value.Compare(head.Next.Value) <= 0 {
+				newNode := &Node[T]{Value: value, RecordID: recordID, Next: head.Next}
+				idx.Array[leftIndex].Count++
+				idx.Count++
+				head.Next = newNode
+				break loop
 			}
 		}
 
@@ -161,13 +224,58 @@ func (idx *Index[T]) Insert(value Comparable[T], recordID uint64) error {
 		head = head.Next
 	}
 
-	// 균형 검사 및 재균형
-	// ...
+	if idx.Array[leftIndex].Count < idx.Threshold {
+		return nil
+	}
+
+	count := uint64(0)
+	prev = nil
+	head = idx.Array[leftIndex].Head
+	for head != nil {
+		prev = head
+		head = head.Next
+		count++
+
+		if count == idx.Array[leftIndex].Count/2 {
+			break
+		}
+	}
+
+	prev.Next = nil
+	totalCount := idx.Array[leftIndex].Count
+	idx.Array[leftIndex].Count = count
+
+	newArray := make([]*IndexArray[T], len(idx.Array)+1)
+	copy(newArray, idx.Array[:leftIndex+1])
+	newArray[leftIndex+1] = &IndexArray[T]{Head: head, Count: totalCount - count}
+	copy(newArray[leftIndex+2:], idx.Array[leftIndex+1:])
+	idx.Array = newArray
 
 	return nil
 }
 
-// ... (재균형 함수 구현) ...
-func (idx *Index[T]) rebalance() {
-	// ... (재균형 로직 구현) ...
+func (idx *Index[T]) GoString() string {
+	idx.Mutex.RLock()
+	defer idx.Mutex.RUnlock()
+
+	builder := strings.Builder{}
+	for i := range idx.Array {
+		if i > 0 {
+			builder.WriteString("\n")
+		}
+
+		realLength := 0
+		head := idx.Array[i].Head
+		for head != nil {
+			realLength++
+			head = head.Next
+		}
+
+		builder.WriteString(" List[")
+		builder.WriteString(strconv.FormatUint(idx.Array[i].Count, 10))
+		builder.WriteString("]: ")
+		builder.WriteString(idx.Array[i].GoString())
+	}
+
+	return builder.String()
 }
