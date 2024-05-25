@@ -2,6 +2,10 @@
 
 BALI is Breakable Array-Linked list Index.
 
+## structure
+
+
+
 ## Performance
 
 environment
