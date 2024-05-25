@@ -145,8 +145,59 @@ func (idx *Index[T]) Search(value Comparable[T]) (uint64, error) {
 	return 0, new(ErrNotFound)
 }
 
-func (idx *Index[T]) SearchRange(start Comparable[T], end Comparable[T]) (<-chan uint64, error) {
+func (idx *Index[T]) SearchRange(start Comparable[T], end Comparable[T], callback func(uint64) error) error {
+	idx.Mutex.RLock()
+	defer idx.Mutex.RUnlock()
 
+	startArrayIndex, err := idx.binarySearchArray(start)
+	if err != nil {
+		return fmt.Errorf("cannot find index of start: %w", err)
+	}
+
+	endArrayIndex, err := idx.binarySearchArray(end)
+	if err != nil {
+		return fmt.Errorf("cannot find index of end: %w", err)
+	}
+
+	for index := startArrayIndex; index <= endArrayIndex; index++ {
+		arr := idx.Array[index]
+
+		switch index {
+		case startArrayIndex:
+			head := arr.Head
+			for head != nil {
+				if start.Compare(head.Value) <= 0 {
+					if err := callback(head.RecordID); err != nil {
+						return fmt.Errorf("callback error: %w", err)
+					}
+				}
+
+				head = head.Next
+			}
+		case endArrayIndex:
+			head := arr.Head
+			for head != nil {
+				if end.Compare(head.Value) <= 0 {
+					if err := callback(head.RecordID); err != nil {
+						return fmt.Errorf("callback error: %w", err)
+					}
+				}
+
+				head = head.Next
+			}
+		default:
+			head := arr.Head
+			for head != nil {
+				if err := callback(head.RecordID); err != nil {
+					return fmt.Errorf("callback error: %w", err)
+				}
+
+				head = head.Next
+			}
+		}
+	}
+
+	return nil
 }
 
 func (idx *Index[T]) Insert(value Comparable[T], recordID uint64) error {
