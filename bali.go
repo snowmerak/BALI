@@ -349,6 +349,8 @@ func (idx *Index[T]) Delete(value Comparable[T], recordID uint64) bool {
 				if idx.Array[leftIndex].Head == nil {
 					idx.Array = append(idx.Array[:leftIndex], idx.Array[leftIndex+1:]...)
 				}
+
+				return true
 			}
 		case 1:
 			return false
