@@ -242,3 +242,142 @@ func TestRaceCondition(t *testing.T) {
 
 	wg.Wait()
 }
+
+func BenchmarkInsert(b *testing.B) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	for i := 0; i < b.N; i++ {
+		idx.Insert(bali.U64(i), uint64(i))
+	}
+}
+
+func BenchmarkSearch(b *testing.B) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	for i := 0; i < length; i++ {
+		idx.Insert(bali.U64(i), uint64(i))
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = idx.Search(bali.U64(i))
+	}
+}
+
+func BenchmarkDelete(b *testing.B) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	for i := 0; i < length; i++ {
+		idx.Insert(bali.U64(i), uint64(i))
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		idx.Delete(bali.U64(i), uint64(i))
+	}
+}
+
+func BenchmarkConcurrentInsert(b *testing.B) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	wg := new(sync.WaitGroup)
+
+	for i := 0; i < b.N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			idx.Insert(bali.U64(i), uint64(i))
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func BenchmarkConcurrentSearch(b *testing.B) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	for i := 0; i < length; i++ {
+		idx.Insert(bali.U64(i), uint64(i))
+	}
+
+	wg := new(sync.WaitGroup)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			_, _ = idx.Search(bali.U64(i))
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func BenchmarkConcurrentDelete(b *testing.B) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	for i := 0; i < length; i++ {
+		idx.Insert(bali.U64(i), uint64(i))
+	}
+
+	wg := new(sync.WaitGroup)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			idx.Delete(bali.U64(i), uint64(i))
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func BenchmarkRaceCondition(b *testing.B) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	indices := make([]uint64, length)
+	for i := uint64(0); i < length; i++ {
+		indices[i] = i
+	}
+	for i := 0; i < length; i++ {
+		j := rand.Intn(length)
+		indices[i], indices[j] = indices[j], indices[i]
+	}
+
+	wg := new(sync.WaitGroup)
+
+	b.ResetTimer()
+
+	for _, i := range indices {
+		if err := idx.Insert(bali.U64(i), i); err != nil {
+			b.Errorf("Error inserting value %d: %v", i, err)
+		}
+
+		wg.Add(1)
+		go func(i uint64) {
+			defer wg.Done()
+
+			time.Sleep(1 * time.Millisecond)
+
+			if _, err := idx.Search(bali.U64(i)); err != nil {
+				b.Errorf("Error searching for value %d: %v", i, err)
+			}
+
+			if deleted := idx.Delete(bali.U64(i), i); !deleted {
+				b.Errorf("Error deleting value %d", i)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}
