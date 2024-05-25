@@ -1,6 +1,6 @@
 # BALI
 
-BALI is Breakable Array-Linked list Index.
+BALI is Balanced Array-Linked list Index.
 
 ## structure
 
