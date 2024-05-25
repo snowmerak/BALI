@@ -336,6 +336,7 @@ func (idx *Index[T]) Delete(value Comparable[T], recordID uint64) bool {
 	for head != nil {
 		switch value.Compare(head.Value) {
 		case -1:
+			return false
 		case 0:
 			if recordID == head.RecordID {
 				if prev != nil {
@@ -353,7 +354,6 @@ func (idx *Index[T]) Delete(value Comparable[T], recordID uint64) bool {
 				return true
 			}
 		case 1:
-			return false
 		}
 
 		prev = head
