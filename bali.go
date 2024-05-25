@@ -8,10 +8,6 @@ import (
 	"sync"
 )
 
-type Comparable[T any] interface {
-	Compare(comparable2 Comparable[T]) int
-}
-
 type Node[T any] struct {
 	Value    Comparable[T]
 	RecordID uint64
