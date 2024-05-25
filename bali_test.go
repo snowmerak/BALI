@@ -218,9 +218,6 @@ func TestRaceCondition(t *testing.T) {
 	wg := new(sync.WaitGroup)
 
 	for _, i := range indices {
-		t.Log(idx.GoString())
-		t.Log("-------")
-
 		if err := idx.Insert(bali.U64(i), i); err != nil {
 			t.Errorf("Error inserting value %d: %v", i, err)
 		}
