@@ -7,7 +7,7 @@ import (
 )
 
 const threshold = 128
-const length = 10000
+const length = 100000
 
 func TestInsertAndSearch(t *testing.T) {
 	idx := bali.NewIndex[bali.U64](threshold)
