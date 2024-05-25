@@ -82,6 +82,10 @@ func IsNotFoundErr(err error) bool {
 }
 
 func (idx *Index[T]) binarySearchArray(value Comparable[T]) (int, error) {
+	if len(idx.Array) == 0 {
+		return -1, new(ErrEmptyIndex)
+	}
+
 	leftIndex := 0
 	rightIndex := len(idx.Array) - 1
 
