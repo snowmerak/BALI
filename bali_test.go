@@ -83,8 +83,11 @@ func TestSearchRange(t *testing.T) {
 		}
 	}
 
-	var foundIDs []uint64
-	err := idx.SearchRange(bali.U64(250), bali.U64(750), func(recordID uint64) error {
+	start := uint64(150)
+	end := uint64(3750)
+
+	foundIDs := make([]uint64, 0, end-start+1)
+	err := idx.SearchRange(bali.U64(start), bali.U64(end), func(recordID uint64) error {
 		foundIDs = append(foundIDs, recordID)
 		return nil
 	})
@@ -92,14 +95,14 @@ func TestSearchRange(t *testing.T) {
 		t.Errorf("Error searching for range: %v", err)
 	}
 
-	if len(foundIDs) != 750-250+1 {
-		t.Errorf("Expected 501 IDs, got %d", len(foundIDs))
+	if uint64(len(foundIDs)) != end-start+1 {
+		t.Errorf("Expected %d IDs, got %d", end-start+1, len(foundIDs))
 	}
 
-	for i := 250; i <= 750; i++ {
+	for i := start; i <= end; i++ {
 		found := false
 		for _, id := range foundIDs {
-			if id == uint64(i) {
+			if id == i {
 				found = true
 				break
 			}
