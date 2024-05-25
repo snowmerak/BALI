@@ -102,7 +102,7 @@ func (idx *Index[T]) binarySearchArray(value Comparable[T]) (int, error) {
 				return midIndex, nil
 			}
 
-			if value.Compare(idx.Array[midIndex+1].Head.Value) <= 0 {
+			if value.Compare(idx.Array[midIndex+1].Head.Value) < 0 {
 				return midIndex, nil
 			}
 
