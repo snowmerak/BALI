@@ -342,6 +342,34 @@ func BenchmarkConcurrentDelete(b *testing.B) {
 	wg.Wait()
 }
 
+func BenchmarkSearchRange(b *testing.B) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	indices := make([]uint64, length)
+	for i := uint64(0); i < length; i++ {
+		indices[i] = i
+	}
+	for i := 0; i < length; i++ {
+		j := rand.Intn(length)
+		indices[i], indices[j] = indices[j], indices[i]
+	}
+
+	for _, i := range indices {
+		idx.Insert(bali.U64(i), i)
+	}
+
+	start := uint64(150)
+	end := uint64(9750)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		idx.SearchRange(bali.U64(start), bali.U64(end), func(recordID uint64) error {
+			return nil
+		})
+	}
+}
+
 func BenchmarkRaceCondition(b *testing.B) {
 	idx := bali.NewIndex[bali.U64](threshold)
 
