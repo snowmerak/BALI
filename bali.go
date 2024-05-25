@@ -181,10 +181,12 @@ func (idx *Index[T]) SearchRange(start Comparable[T], end Comparable[T], callbac
 		case endArrayIndex:
 			head := arr.Head
 			for head != nil {
-				if end.Compare(head.Value) <= 0 {
+				if end.Compare(head.Value) >= 0 {
 					if err := callback(head.RecordID); err != nil {
 						return fmt.Errorf("callback error: %w", err)
 					}
+				} else {
+					break
 				}
 
 				head = head.Next
