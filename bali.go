@@ -106,6 +106,9 @@ func (idx *Index[T]) binarySearchArray(value Comparable[T]) (int, error) {
 				return midIndex, nil
 			}
 
+			if idx.Array[midIndex+1].Head == nil {
+				fmt.Printf("array: %d's head is nil\n", midIndex+1)
+			}
 			if value.Compare(idx.Array[midIndex+1].Head.Value) < 0 {
 				return midIndex, nil
 			}
@@ -288,12 +291,13 @@ loop:
 	count := uint64(0)
 	prev = nil
 	head = idx.Array[leftIndex].Head
+	limit := idx.Array[leftIndex].Count / 2
 	for head != nil {
 		prev = head
 		head = head.Next
 		count++
 
-		if count == idx.Array[leftIndex].Count/2 {
+		if count >= limit {
 			break
 		}
 	}
@@ -350,6 +354,9 @@ func (idx *Index[T]) Delete(value Comparable[T], recordID uint64) bool {
 				if idx.Array[leftIndex].Head == nil {
 					idx.Array = append(idx.Array[:leftIndex], idx.Array[leftIndex+1:]...)
 				}
+
+				idx.Array[leftIndex].Count--
+				idx.Count--
 
 				return true
 			}

@@ -3,7 +3,9 @@ package bali_test
 import (
 	bali "github.com/snowmerak/BALI"
 	"math/rand"
+	"sync"
 	"testing"
+	"time"
 )
 
 const threshold = 128
@@ -199,4 +201,44 @@ func TestNotFound(t *testing.T) {
 	if !bali.IsNotFoundErr(err) {
 		t.Errorf("Expected NotFoundErr, got %v", err)
 	}
+}
+
+func TestRaceCondition(t *testing.T) {
+	idx := bali.NewIndex[bali.U64](threshold)
+
+	indices := make([]uint64, length)
+	for i := uint64(0); i < length; i++ {
+		indices[i] = i
+	}
+	for i := 0; i < length; i++ {
+		j := rand.Intn(length)
+		indices[i], indices[j] = indices[j], indices[i]
+	}
+
+	wg := new(sync.WaitGroup)
+
+	for _, i := range indices {
+		t.Log(idx.GoString())
+		t.Log("-------")
+
+		if err := idx.Insert(bali.U64(i), i); err != nil {
+			t.Errorf("Error inserting value %d: %v", i, err)
+		}
+
+		wg.Add(1)
+		go func(i uint64) {
+			defer wg.Done()
+
+			<-time.After(1 * time.Millisecond)
+			if _, err := idx.Search(bali.U64(i)); err != nil {
+				t.Errorf("Error searching for value %d: %v", i, err)
+			}
+
+			if deleted := idx.Delete(bali.U64(i), i); !deleted {
+				t.Errorf("Error deleting value %d", i)
+			}
+		}(i)
+	}
+
+	wg.Wait()
 }
