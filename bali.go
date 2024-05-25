@@ -351,11 +351,12 @@ func (idx *Index[T]) Delete(value Comparable[T], recordID uint64) bool {
 					idx.Array[leftIndex].Head = head.Next
 				}
 
+				idx.Array[leftIndex].Count--
+
 				if idx.Array[leftIndex].Head == nil {
 					idx.Array = append(idx.Array[:leftIndex], idx.Array[leftIndex+1:]...)
 				}
 
-				idx.Array[leftIndex].Count--
 				idx.Count--
 
 				return true
