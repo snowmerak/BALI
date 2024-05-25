@@ -145,6 +145,10 @@ func (idx *Index[T]) Search(value Comparable[T]) (uint64, error) {
 	return 0, new(ErrNotFound)
 }
 
+func (idx *Index[T]) SearchRange(start Comparable[T], end Comparable[T]) (<-chan uint64, error) {
+
+}
+
 func (idx *Index[T]) Insert(value Comparable[T], recordID uint64) error {
 	idx.Mutex.Lock()
 	defer idx.Mutex.Unlock()
@@ -248,6 +252,56 @@ loop:
 	idx.Array = newArray
 
 	return nil
+}
+
+func (idx *Index[T]) Delete(value Comparable[T], recordID uint64) bool {
+	idx.Mutex.Lock()
+	defer idx.Mutex.Unlock()
+
+	if len(idx.Array) == 0 {
+		return false
+	}
+
+	leftIndex, err := idx.binarySearchArray(value)
+	if err != nil {
+		return false
+	}
+
+	if leftIndex < 0 {
+		leftIndex = 0
+	}
+
+	idx.Array[leftIndex].Mutex.Lock()
+	defer idx.Array[leftIndex].Mutex.Unlock()
+
+	prev := (*Node[T])(nil)
+	head := idx.Array[leftIndex].Head
+	for head != nil {
+		switch value.Compare(head.Value) {
+		case -1:
+		case 0:
+			if recordID == head.RecordID {
+				if prev != nil {
+					prev.Next = head.Next
+				}
+
+				if idx.Array[leftIndex].Head.RecordID == head.RecordID {
+					idx.Array[leftIndex].Head = head.Next
+				}
+
+				if idx.Array[leftIndex].Head == nil {
+					idx.Array = append(idx.Array[:leftIndex], idx.Array[leftIndex+1:]...)
+				}
+			}
+		case 1:
+			return false
+		}
+
+		prev = head
+		head = head.Next
+	}
+
+	return false
 }
 
 func (idx *Index[T]) GoString() string {
