@@ -84,7 +84,7 @@ func TestSearchRange(t *testing.T) {
 	}
 
 	start := uint64(150)
-	end := uint64(3750)
+	end := uint64(9750)
 
 	foundIDs := make([]uint64, 0, end-start+1)
 	err := idx.SearchRange(bali.U64(start), bali.U64(end), func(recordID uint64) error {
